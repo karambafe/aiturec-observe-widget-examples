@@ -4,12 +4,15 @@
       Виджет в одну строку с использованием Intersection Observer API
     </h1>
 
-    <div class="widget">
+    <div
+      :id="WIDGET_ID"
+      class="widget"
+    >
       <h3 class="widget__title">Читайте также:</h3>
 
       <ul class="widget__list">
         <li
-          v-for="item in items"
+          v-for="item in ITEMS"
           :key="item.item_id"
           class="widget__item"
         >
@@ -27,7 +30,10 @@
 </template>
 
 <script>
-const items = [
+import WidgetObserver from '@/widgetObserver';
+
+const WIDGET_ID = 'aiturec-widget';
+const ITEMS = [
   { item_id: '1', title: 'Lorem ipsum dolor sit amet', image_url: 'https://picsum.photos/300/300?random=1' },
   { item_id: '2', title: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit', image_url: 'https://picsum.photos/300/300?random=2' },
   { item_id: '3', title: 'Lorem ipsum dolor sit amet, consectetur ', image_url: 'https://picsum.photos/300/300?random=3' },
@@ -35,7 +41,20 @@ const items = [
 
 export default {
   name: 'app',
-  data: () => ({ items }),
+  data: () => ({
+    ITEMS,
+    WIDGET_ID,
+  }),
+  mounted() {
+    this.widgetObserver = new WidgetObserver({
+      widgetId: WIDGET_ID,
+      items: ITEMS,
+    });
+    this.widgetObserver.init();
+  },
+  beforeDestroy() {
+    this.widgetObserver.destroy();
+  },
 };
 </script>
 
@@ -52,6 +71,7 @@ export default {
 
 .widget {
   margin-top: 80vh;
+  margin-bottom: 100vh;
 
   &__title {
     margin-bottom: 10px;
