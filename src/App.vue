@@ -1,8 +1,24 @@
 <template>
   <div id="app">
     <h1 style="max-width: 800px;">
-      Виджет в одну строку с использованием Intersection Observer API
+      Виджет в одну строку с использованием Intersection Observer API.
     </h1>
+
+    <h3>Условия для виджета:</h3>
+    <ul>
+      <li>На всех брейкпоинтах имеет одинаковый вид</li>
+      <li>Состоит из одной строки и трех рекомендаций</li>
+    </ul>
+
+    <h3>Кратко о реализации:</h3>
+
+    <p>
+      В данном случае достаточно только определения положения виджета во viewport. <br>
+      При отображении более 50% виджета во viewport в одном массиве
+      отправляется событие w_show для виджета и 3 события i_show для рекомендаций.
+    </p>
+
+    <p>Для тестирования нужно открыть консоль разработчика и проскроллить страницу до виджета.</p>
 
     <div
       :id="WIDGET_ID"
@@ -99,9 +115,10 @@ export default {
   &__recommendation-image {
     display: block;
     width: 100%;
-    padding-top: 100%;
+    height: 150px;
     background-size: cover;
     background-repeat: no-repeat;
+    background-position: center;
   }
 }
 </style>
