@@ -21,20 +21,21 @@ export default class WidgetObserver {
     console.log(`${LOG_TITLE} call init`);
 
     if (!this.widgeListElement || typeof this.widgeListElement === 'undefined') {
-      console.error('Not found DOM element for widget list');
+      console.error(`${LOG_TITLE} Not found DOM element for widget list`);
       return;
     }
 
     /*
       Intersection Observer в intersectionRatio возвращает процент
-      попадания элемента во vieport относительно высоты элемента.
+      попадания элемента во viewport относительно высоты элемента.
       Если высота элемента больше высоты viewport,
       то есть вероятность, что коллбек просто не сработает.
-      Для такого случая нужно скорректировать threshold.
+      Для такого случая нужно высчитать высоту списка с рекомендациями
+      и скорректировать threshold.
     */
     const { height } = this.widgeListElement.getBoundingClientRect();
     if (!height) {
-      console.error('Failed to get height for widget list element');
+      console.error(`${LOG_TITLE} Failed to get height for widget list element`);
       return;
     }
 
@@ -45,7 +46,7 @@ export default class WidgetObserver {
     const options = {
       root: null,
       rootMargin: '0px',
-      // 50% процентов от высоты widgeListElement с дополнительной коррекцией
+      // 50% процентов от высоты списка с рекомендациями с дополнительной коррекцией
       threshold: 0.5 * thresholdCoef,
     };
 
