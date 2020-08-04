@@ -1,21 +1,20 @@
 <template>
   <div id="app">
     <h1 style="max-width: 800px;">
-      Виджет в одну строку с использованием Intersection Observer API.
+      Многострочный виджет с использованием Intersection Observer API.
     </h1>
 
     <h3>Условия для виджета:</h3>
     <ul>
       <li>На всех брейкпоинтах имеет одинаковый вид</li>
-      <li>Состоит из одной строки и трех рекомендаций</li>
+      <li>Состоит из четырех строк и трех столбцов</li>
+      <li>Отступы между строками 20px</li>
     </ul>
 
     <h3>Кратко о реализации:</h3>
 
     <p>
-      В данном случае достаточно только определения положения виджета во viewport. <br>
-      При отображении более 50% виджета во viewport в одном массиве
-      отправляется событие w_show для виджета и 3 события i_show для рекомендаций.
+      WIP
     </p>
 
     <p>Для тестирования нужно открыть консоль разработчика и проскроллить страницу до виджета.</p>
@@ -46,14 +45,25 @@
 </template>
 
 <script>
+import { LoremIpsum } from 'lorem-ipsum';
 import WidgetObserver from '@/widgetObserver';
 
+const lorem = new LoremIpsum({
+  wordsPerSentence: {
+    max: 10,
+    min: 4,
+  },
+});
+
 const WIDGET_ID = 'aiturec-widget';
-const ITEMS = [
-  { item_id: '1', title: 'Lorem ipsum dolor sit amet', image_url: 'https://picsum.photos/300/300?random=1' },
-  { item_id: '2', title: 'Lorem ipsum dolor sit amet, consectetur adipiscing elit', image_url: 'https://picsum.photos/300/300?random=2' },
-  { item_id: '3', title: 'Lorem ipsum dolor sit amet, consectetur ', image_url: 'https://picsum.photos/300/300?random=3' },
-];
+const ROWS_COUNT = 4;
+const COLUMNS_COUNT = 3;
+const ROWS_INDENTS = 20;
+const ITEMS = [...Array(ROWS_COUNT * COLUMNS_COUNT).keys()].map(i => ({
+  item_id: String(i + 1),
+  title: lorem.generateSentences(1),
+  image_url: `https://picsum.photos/300/300?random=${i + 1}`,
+}));
 
 export default {
   name: 'app',
@@ -65,6 +75,9 @@ export default {
     this.widgetObserver = new WidgetObserver({
       widgetId: WIDGET_ID,
       items: ITEMS,
+      rowsCount: ROWS_COUNT,
+      columnsCount: COLUMNS_COUNT,
+      rowsIndents: ROWS_INDENTS,
     });
     this.widgetObserver.init();
   },
@@ -97,6 +110,7 @@ export default {
     display: grid;
     grid-template-columns: repeat(3, 1fr);
     grid-column-gap: 16px;
+    grid-row-gap: 20px;
     margin: 0;
     padding: 0;
     list-style-type: none;

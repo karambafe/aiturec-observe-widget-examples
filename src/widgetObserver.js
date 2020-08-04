@@ -7,14 +7,23 @@
 const LOG_TITLE = '[Widget Observer]:';
 
 export default class WidgetObserver {
-  constructor({ items, widgetId }) {
+  constructor({
+    items, widgetId,
+    rowsCount, columnsCount, rowsIndents,
+  }) {
     this.items = items;
     this.widgetId = widgetId;
+    this.rowsCount = rowsCount;
+    this.columnsCount = columnsCount;
+    this.rowsIndents = rowsIndents;
 
     // Для последующих расчетов высоты лучше брать список с рекомендациями, а не весь виджет
     this.widgeListElement = document.querySelector(`#${widgetId} ul`);
 
     this.intersectionObserver = null;
+
+    this.events = null;
+    this.rows = null;
   }
 
   init() {
