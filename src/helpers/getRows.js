@@ -12,14 +12,8 @@ export default function getRows({
   const rowIndentPercent = Math.floor((rowsIndents / widgetListHeight) * 100);
   const rowHeightPercent = Math.floor((100 - rowIndentPercent * (rowsCount - 1)) / rowsCount);
 
-  /*
-      Intersection Observer в intersectionRatio возвращает процент
-      попадания элемента во viewport относительно высоты элемента.
-      Если высота элемента больше высоты viewport,
-      то есть вероятность, что коллбек просто не сработает.
-      Для такого случая нужно высчитать высоту списка с рекомендациями
-      и скорректировать threshold.
-    */
+  // корректировка значения widgetListHeight для случая,
+  // когда высота элемента со списком больше высоты viewport
   const thresholdCoef = window.innerHeight > widgetListHeight
     ? 1
     : window.innerHeight / widgetListHeight;
@@ -32,6 +26,7 @@ export default function getRows({
 
     rows.push({
       rowNumber: i + 1,
+      percent,
       threshold: (percent / 100) * thresholdCoef,
       itemsIds: itemsIds.slice(i * columnsCount, i * columnsCount + columnsCount),
     });
