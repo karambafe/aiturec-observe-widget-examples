@@ -1,24 +1,14 @@
 # aiturec-observe-widget-examples
 
-## Project setup
-```
-npm install
-```
+Примеры реализации формирования массива событий просмотра виджета и просмотра рекомендаций, а также их отправки с задержкой для сервиса [ainews b2b](https://b2b.ainews.kz/) c использованием [Intersection Observer API](https://developer.mozilla.org/en-US/docs/Web/API/Intersection_Observer_API)
 
-### Compiles and hot-reloads for development
-```
-npm run serve
-```
+* [Виджет в одну строку, один брейкпоинт](https://github.com/karambafe/aiturec-observe-widget-examples/tree/one-line-widget)
 
-### Compiles and minifies for production
-```
-npm run build
-```
+* [Многострочный виджет, один брейкпоинт](https://github.com/karambafe/aiturec-observe-widget-examples/tree/multiline-widget)
 
-### Lints and fixes files
-```
-npm run lint
-```
+* [Многострочный виджет, три брейкпоинта](https://github.com/karambafe/aiturec-observe-widget-examples/tree/multiline-widget-three-breakpoints)
 
-### Customize configuration
-See [Configuration Reference](https://cli.vuejs.org/config/).
+## Локальный запуск проекта
+```
+npm install && npm run serve
+```
