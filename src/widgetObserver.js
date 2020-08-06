@@ -7,24 +7,21 @@ import throttle from 'lodash/throttle';
 
 import getRows from './helpers/getRows';
 import getElementViewedPercent from './helpers/getElementViewedPercent';
+import getCurrentBreakpoint from './helpers/getCurrentBreakpoint';
 
 const LOG_TITLE = '[Widget Observer]:';
 
 export default class WidgetObserver {
-  constructor({
-    items, widgetId,
-    rowsCount, columnsCount, rowsIndents,
-  }) {
+  constructor({ items, widgetId, breakpoints }) {
     this.items = items;
     this.widgetId = widgetId;
-    this.rowsCount = rowsCount;
-    this.columnsCount = columnsCount;
-    this.rowsIndents = rowsIndents;
+    this.breakpoints = breakpoints;
 
     // Для последующих расчетов высоты лучше брать список с рекомендациями, а не весь виджет
     this.widgeListElement = document.querySelector(`#${widgetId} ul`);
 
     this.intersectionObserver = null;
+    this.currentBreakpoint = getCurrentBreakpoint(breakpoints);
 
     /*
       Объект с событиями, которые необходимо отправить или уже отправлены.
@@ -51,6 +48,7 @@ export default class WidgetObserver {
     // leading: false позволяет отменить первый моментальный вызов переданной функции
     this.sendEvents = throttle(this.sendEvents.bind(this), 2000, { leading: false });
     this.handleScroll = throttle(this.handleScroll.bind(this), 100, { leading: false });
+    this.handleResize = throttle(this.handleResize.bind(this), 500, { leading: false });
   }
 
   // массив рекомендаций, который нужно отправить
@@ -81,6 +79,12 @@ export default class WidgetObserver {
       return;
     }
 
+    if (!this.currentBreakpoint) {
+      console.error(`${LOG_TITLE} Not found settings for current breakpoint`);
+      return;
+    }
+    console.log(`${LOG_TITLE} currentBreakpoint`, this.currentBreakpoint);
+
     const { height: widgetListHeight } = this.widgeListElement.getBoundingClientRect();
     if (!widgetListHeight) {
       console.error(`${LOG_TITLE} Failed to get height for widget list element`);
@@ -89,9 +93,9 @@ export default class WidgetObserver {
 
     this.rows = getRows({
       widgetListHeight,
-      rowsCount: this.rowsCount,
-      columnsCount: this.columnsCount,
-      rowsIndents: this.rowsIndents,
+      rowsCount: this.currentBreakpoint.rowsCount,
+      columnsCount: this.currentBreakpoint.columnsCount,
+      rowsIndents: this.currentBreakpoint.rowsIndents,
       items: this.items,
     });
 
@@ -127,6 +131,8 @@ export default class WidgetObserver {
       console.log(`${LOG_TITLE} use Intersection Observer API`);
       this.createIntersectionObserver();
     }
+
+    window.addEventListener('resize', this.handleResize);
   }
 
   createIntersectionObserver() {
@@ -235,6 +241,55 @@ export default class WidgetObserver {
     if (this.eventsForSend.length) this.sendEvents();
   }
 
+  handleResize() {
+    /*
+      Основная логика:
+      - Высчитываем брейкпоинт для нового размера окна
+      - Если брекйпоинт изменился, то нужно пересчитать размеры и положение строк
+      - Записываем в контекст данные по новому брейкпоинту
+      - Объект events обнулять не нужно,
+        так как там хранятся данные по отправленным и неотправленным событиям
+     */
+    const newBreakpoint = getCurrentBreakpoint(this.breakpoints);
+
+    if (!newBreakpoint) {
+      console.error(`${LOG_TITLE} Not found settings for new breakpoint`);
+      return;
+    }
+
+    // Если это тот же брейкпоинт, то ничего не делаем
+    if (JSON.stringify(newBreakpoint) === JSON.stringify(this.currentBreakpoint)) return;
+
+    const { height: widgetListHeight } = this.widgeListElement.getBoundingClientRect();
+    if (!widgetListHeight) {
+      console.error(`${LOG_TITLE} Failed to get height for widget list element`);
+      return;
+    }
+
+    this.rows = getRows({
+      widgetListHeight,
+      rowsCount: newBreakpoint.rowsCount,
+      columnsCount: newBreakpoint.columnsCount,
+      rowsIndents: newBreakpoint.rowsIndents,
+      items: this.items,
+    });
+    console.log(`${LOG_TITLE} newCurrentBreakpoint`, newBreakpoint);
+    this.currentBreakpoint = newBreakpoint;
+    this.handleScroll();
+
+    /*
+      В данном примере все обработчики будут удалены только в  случае,
+      если отправлено максимальное кол-во рекомендаций для брейкпоинта 1024px - ∞,
+      что может негативно сказаться пользователях с мобильных устройств и планшетов.
+
+      В качестве дальнейшей оптимизации можно проверять
+      отправлены ли все событиях в рамках текущего брейкпоинта.
+      Если да, то удалять обработчики для события scroll/снимать наблюдение за виджетом.
+      При смене брейкпоинта делать дополнительные проверки и,
+      в случае необходимости, добавлять обработчики заново.
+    */
+  }
+
   sendEvents() {
     // Убираем из массива неотправленных событий лишние данные
     const events = this.eventsForSend.map(eventForSend => ({
@@ -279,6 +334,8 @@ export default class WidgetObserver {
   destroy() {
     console.log(`${LOG_TITLE} call destroy`);
     window.removeEventListener('scroll', this.handleScroll);
+    window.removeEventListener('resize', this.handleResize);
+
     if (this.intersectionObserver && this.widgeListElement) {
       this.intersectionObserver.unobserve(this.widgeListElement);
       this.intersectionObserver = null;

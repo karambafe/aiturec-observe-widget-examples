@@ -1,14 +1,18 @@
 <template>
   <div id="app">
     <h1 style="max-width: 800px;">
-      Многострочный виджет с использованием Intersection Observer API.
+      Многострочный виджет с тремя брейкпоинтами с использованием Intersection Observer API.
     </h1>
 
     <h3>Условия для виджета:</h3>
     <ul>
-      <li>На всех брейкпоинтах имеет одинаковый вид</li>
-      <li>Состоит из четырех строк и трех столбцов</li>
-      <li>Отступы между строками 20px</li>
+      <li>Мобильный брейкпоинт (320px-767px): 2 строки, 2 столбца, отступ между строками 10px</li>
+      <li>Планшет (768px - 1023px): 3 строки, 2 столбца, отступ между строками 20px</li>
+      <li>Десктоп (1024px - ∞): 4 строки, 3 столбца, отступ между строками 30px</li>
+      <li>
+        Рекомендации загружаются 1 раз на любом брейкпоинте с запасом.
+        Лишние рекомендации скрываются стилями
+      </li>
     </ul>
 
     <h3>Кратко о реализации:</h3>
@@ -18,6 +22,10 @@
       <li>Все события под отправку помечаются флагом isSended со значением false</li>
       <li>Метод отправки событий вызывается с троттлингом в 2 секунды</li>
       <li>У отправленных событий флагу isSended выставляется значение true</li>
+      <li>
+        При смене брейкпоинта пересчитываются данные
+        по расположению рекомендаций в строках виджета
+      </li>
     </ul>
 
     <p>Для тестирования нужно открыть консоль разработчика и проскроллить страницу до виджета.</p>
@@ -48,6 +56,7 @@
 </template>
 
 <script>
+/* eslint-disable object-curly-newline */
 import { LoremIpsum } from 'lorem-ipsum';
 import WidgetObserver from '@/widgetObserver';
 
@@ -59,10 +68,12 @@ const lorem = new LoremIpsum({
 });
 
 const WIDGET_ID = 'aiturec-widget';
-const ROWS_COUNT = 4;
-const COLUMNS_COUNT = 3;
-const ROWS_INDENTS = 20;
-const ITEMS = [...Array(ROWS_COUNT * COLUMNS_COUNT).keys()].map(i => ({
+const BREAKPOINTS = [
+  { rowsCount: 2, columnsCount: 2, rowsIndents: 10, width: 0 },
+  { rowsCount: 3, columnsCount: 2, rowsIndents: 20, width: 769 },
+  { rowsCount: 4, columnsCount: 3, rowsIndents: 30, width: 1024 },
+];
+const ITEMS = [...Array(12).keys()].map(i => ({
   item_id: String(i + 1),
   title: lorem.generateSentences(1),
   image_url: `https://picsum.photos/300/300?random=${i + 1}`,
@@ -78,9 +89,7 @@ export default {
     this.widgetObserver = new WidgetObserver({
       widgetId: WIDGET_ID,
       items: ITEMS,
-      rowsCount: ROWS_COUNT,
-      columnsCount: COLUMNS_COUNT,
-      rowsIndents: ROWS_INDENTS,
+      breakpoints: BREAKPOINTS,
     });
     this.widgetObserver.init();
   },
@@ -111,13 +120,44 @@ export default {
 
   &__list {
     display: grid;
-    grid-template-columns: repeat(3, 1fr);
+    grid-template-columns: repeat(2, 1fr);
     grid-column-gap: 16px;
-    grid-row-gap: 20px;
+    grid-row-gap: 10px;
     margin: 0;
     padding: 0;
     list-style-type: none;
     border: 1px solid #2c3e50;
+
+    @media (min-width: 768px) {
+      grid-row-gap: 20px;
+    }
+
+    @media (min-width: 1024px) {
+      grid-template-columns: repeat(3, 1fr);
+      grid-row-gap: 30px;
+    }
+  }
+
+  &__item {
+    &:nth-child(n + 5) {
+      display: none;
+    }
+
+    @media (min-width: 768px) {
+      &:nth-child(n + 5) {
+        display: block;
+      }
+
+      &:nth-child(n + 7) {
+        display: none;
+      }
+    }
+
+    @media (min-width: 1024px) {
+      &:nth-child(n + 7) {
+        display: block;
+      }
+    }
   }
 
   &__recommendation {
