@@ -275,7 +275,15 @@ export default class WidgetObserver {
     });
     console.log(`${LOG_TITLE} newCurrentBreakpoint`, newBreakpoint);
     this.currentBreakpoint = newBreakpoint;
-    this.handleScroll();
+
+    if (this.intersectionObserver) {
+      this.intersectionObserver.unobserve(this.widgeListElement);
+      this.intersectionObserver = null;
+
+      this.createIntersectionObserver();
+    } else {
+      this.handleScroll();
+    }
 
     /*
       В данном примере все обработчики будут удалены только в  случае,
