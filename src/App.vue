@@ -14,10 +14,17 @@
     <h3>Кратко о реализации:</h3>
 
     <ul>
-      <li>Для каждой строки высчитываеся процент попадания во viewport</li>
-      <li>Все события под отправку помечаются флагом isSended со значением false</li>
+      <li>
+        Для каждой рекомендации добавляется наблюдатель
+        попадания во viewport (Intersection Observer)
+      </li>
+      <li>
+        При срабатывании коллбека наблюдателя рекомендации, добавляется новое событие на отправку
+        с флагом isSended и значением false, а сам наблюдатель с рекомендации снимается
+      </li>
       <li>Метод отправки событий вызывается с троттлингом в 2 секунды</li>
       <li>У отправленных событий флагу isSended выставляется значение true</li>
+      <li>Если отправлены все события, то снимаются наблюдатели со всех рекомендаций.</li>
     </ul>
 
     <p>Для тестирования нужно открыть консоль разработчика и проскроллить страницу до виджета.</p>
@@ -34,13 +41,13 @@
           :key="item.item_id"
           class="widget__item"
         >
-          <a href="/" class="widget__recommendation">
+          <a href="/" class="widget__recommendation" :data-item-id="item.item_id">
             <span
               class="widget__recommendation-image"
               :style="{ backgroundImage: `url(${item.image_url})` }"
             />
             <span class="widget__recommendation-title">{{ item.title }}</span>
-          </a>
+           </a>
         </li>
       </ul>
     </div>
