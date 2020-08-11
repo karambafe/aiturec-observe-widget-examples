@@ -3,6 +3,30 @@
   Для использования на публичных сайтах рекомендуется использовать полифилл https://github.com/w3c/IntersectionObserver/tree/master/polyfill
   В данном проекте полифилл подключен в файле main.js
 */
+
+/*
+  Самое оптимальное решением с точки зрения производительности -
+  установить Intersection Observer (IO) на весь список рекомендаций и рассчитать
+  массив пороговых значений строк, при которых будет вызываться коллбек.
+
+  Но это не подойдет для случаев, когда высота списка рекомендаций больше высоты окна,
+  потому что IO высчитывает процент попадания элемента во viewport.
+  Например, высота списка с рекомендациями 1000px, а высота окна - 300px,
+  массив пороговых значений для трех строк - [0.2, 0.5, 0.8].
+  Коллбек IO вызовется 1 раз в случае, когда пользователь увидел 210px списка с рекомендациям
+  (пороговое значение 0.2), а для пороговых значений 0.5 и 0.8 вызова не будет, так как
+  максмальный процент пересечения такого списка с viewport будет 300 / 1000 * 100% = 30%.
+  Таким образом понять когда пользователь увидел вторую и третью строки будет очень сложно.
+
+  В данном примере приводится более универсальное решение
+  с добавлением IO для всех рекомендаций по отдельности.
+  Пороговое значение устанавливается в 0.5 (пользователь увидел 50% рекомендации),
+  а для случая, когда размер рекомендации больше размера окна,
+  высчитывает дополнительный корректировочный кэффициент.
+
+  После добавления события показа рекомендации (i_show) выполняется снятие наблюдателя,
+  чтобы исключить лишние вызывы коллбеков IO.
+*/
 import throttle from 'lodash/throttle';
 
 import getCurrentBreakpoint from './helpers/getCurrentBreakpoint';
@@ -86,24 +110,6 @@ export default class WidgetObserver {
 
     this.addResizeObserver();
     this.addIntersectionObserver();
-
-    /*
-      Логика текущего примера построена на вычислении высоты всего списка с рекомендациями
-      и вычислении относительно нее процента просмотра для каждой строки.
-
-      Intersection Observer лучше с точки зрения перфоманса,
-      но с учетом текущей логики не всегда будет работать корректно.
-      Если высота списка с рекомендациями (например 1000px) существенно больше
-      высоты окна (300px) и список с рекомендациями находится полностью во viewport,
-      то коллбек обсервера вызовется один раз, а дальше на протяжении 700px
-      проскролливания вызываться не будет.
-      Из-за этого нельзя точно понять какие строки уже были просмотрены, а какие нет.
-
-      В данном случае проблема решается таким образом:
-      если отношение высоты списка с рекомендациями к высоте экрана больше 1.3,
-      то идет подписка на событие скролла и вычисление процента просмотра виджета,
-      в обратном случае используется Intersection Observer с корректировкой значений threshold.
-    */
   }
 
   addResizeObserver() {
@@ -124,7 +130,7 @@ export default class WidgetObserver {
     const windowHeight = window.innerHeight;
     const { rowsCount, rowsIndents } = this.currentBreakpoint;
     // При текущей верстке высота строк примерно одинаковая,
-    // поэтому высоту элемента можно посчитать как высоту одной строки
+    // поэтому высоту рекомендации можно посчитать как высоту одной строки
     const widgetListItemHeight = Math
       .floor((widgetListHeight - (rowsCount - 1 * rowsIndents) / rowsCount));
     // Корректировка threshold в случае когда высота элемента больше высоты окна
@@ -136,7 +142,7 @@ export default class WidgetObserver {
       root: null,
       rootMargin: '0px',
       // 0.5 - если 50% от высоты элемента показалось в области видимости,
-      // то будет вызван коллбек Intersection Observer
+      // то будет вызван коллбек IO
       threshold: threshold * 0.5,
     };
     logInfo('threshold for each list item', threshold * 0.5);
@@ -171,12 +177,12 @@ export default class WidgetObserver {
         if (this.events && this.events[itemId] && this.intersectionObserver) {
           logInfo('the event "i_show" for this element already exists in the object "events". Calling unobserve');
           logGroupEnd();
-          this.intersectionObserver.unobserve(entry.target);
+          if (this.intersectionObserver) this.intersectionObserver.unobserve(entry.target);
           return;
         }
 
         // Добавляем новое событие показа рекомендации на отправку
-        // и снимаем с элемента наблюдателя
+        // и снимаем с элемента наблюдатель
         this.events = {
           ...this.events,
           [itemId]: { type: 'i_show', itemId, isSended: false },
@@ -185,7 +191,8 @@ export default class WidgetObserver {
         logInfo('add an event "i_show" to the object "events" and call unobserve for this element');
         logGroupEnd();
 
-        // Если есть неотправленные события, то вызываем метод их отправки
+        // Если есть неотправленные события,
+        // то вызываем метод их отправки не чаще, чем раз в 2 секунды
         if (this.eventsForSend.length) this.sendEvents();
       });
     };
@@ -207,7 +214,7 @@ export default class WidgetObserver {
     /*
       Основная логика:
       - Высчитываем брейкпоинт для нового размера окна
-      - Если брекйпоинт изменился, то нужно пересчитать размеры и положение строк
+      - Если брекйпоинт изменился, то нужно снять старые наблюдатели за рекомендациями
       - Записываем в контекст данные по новому брейкпоинту
       - Объект events обнулять не нужно,
         так как там хранятся данные по отправленным и неотправленным событиям
@@ -234,6 +241,7 @@ export default class WidgetObserver {
   }
 
   sendEvents() {
+    logGroup('call sendEvents');
     // Убираем из массива неотправленных событий лишние данные
     const events = this.eventsForSend.map(eventForSend => ({
       type: eventForSend.type,
@@ -248,7 +256,6 @@ export default class WidgetObserver {
         events,
       });
     */
-    logGroup('call sendEvents');
     logInfo('events for send', events);
 
     // После нужно пометить отправленные события флагом isSended со значением true
@@ -268,7 +275,7 @@ export default class WidgetObserver {
     logInfo('events object', this.events);
 
     // Если отправлены события для всех рекомендаций и событие показа виджета,
-    // то нужно удалить всех наблюдателей
+    // то нужно снять все наблюдатели
     if (this.eventsSendedCount === this.items.length + 1) {
       logInfo('all events for all breakpoints sent');
       this.removeIntersectionObserver();
@@ -278,7 +285,7 @@ export default class WidgetObserver {
     }
 
     // Если отправлены все возможные события для текущего брейкпоинта,
-    // то нужно удалить наблюдатель за виджетом
+    // то нужно снять наблюдение с рекомендаций
     if (this.eventsSendedCount === this.itemsCountForCurrentBreakpoint + 1) {
       logInfo('all events for current breakpoint sent');
       this.removeIntersectionObserver();
@@ -311,6 +318,10 @@ export default class WidgetObserver {
     logInfo('call destroy');
 
     this.events = null;
+    this.currentBreakpoint = null;
+    this.widgetListElement = null;
+    this.widgetListItemsElements = null;
+
     this.removeIntersectionObserver();
     this.removeResizeObserver();
   }
