@@ -5,11 +5,13 @@
 */
 import throttle from 'lodash/throttle';
 
-import getRows from './helpers/getRows';
-import getElementViewedPercent from './helpers/getElementViewedPercent';
 import getCurrentBreakpoint from './helpers/getCurrentBreakpoint';
-
-const LOG_TITLE = '[Widget Observer]:';
+import {
+  logInfo,
+  logError,
+  logGroup,
+  logGroupEnd,
+} from './helpers/logger';
 
 export default class WidgetObserver {
   constructor({ items, widgetId, breakpoints }) {
@@ -18,7 +20,8 @@ export default class WidgetObserver {
     this.breakpoints = breakpoints;
 
     // Для последующих расчетов высоты лучше брать список с рекомендациями, а не весь виджет
-    this.widgeListElement = document.querySelector(`#${widgetId} ul`);
+    this.widgetListElement = document.querySelector(`#${widgetId} ul`);
+    this.widgetListItemsElements = this.widgetListElement.querySelectorAll('a');
 
     this.intersectionObserver = null;
     this.currentBreakpoint = getCurrentBreakpoint(breakpoints);
@@ -33,21 +36,9 @@ export default class WidgetObserver {
       };
     */
     this.events = null;
-    /*
-      Массив рекомендаций с разбивкой по строкам.
-      Содержит threshold для каждой строки и массив itemId.
-
-      Имеет вид:
-      rows = [
-        rowNumber: 1, threshold: 0.12, itemsIds: ['item_id_1', 'item_id_2', 'item_id_3'],
-        rowNumber: 2, threshold: 0.33, itemsIds: ['item_id_4', 'item_id_5', 'item_id_6'],
-      ];
-    */
-    this.rows = null;
 
     // leading: false позволяет отменить первый моментальный вызов переданной функции
     this.sendEvents = throttle(this.sendEvents.bind(this), 2000, { leading: false });
-    this.handleScroll = throttle(this.handleScroll.bind(this), 100, { leading: false });
     this.handleResize = throttle(this.handleResize.bind(this), 500, { leading: false });
   }
 
@@ -61,7 +52,7 @@ export default class WidgetObserver {
       .filter(item => !item.isSended);
   }
 
-  // Подсчитываем все события с флагом isSended: true
+  // подсчитываем все события с флагом isSended: true
   get eventsSendedCount() {
     if (!this.events) return 0;
     return Object
@@ -71,38 +62,30 @@ export default class WidgetObserver {
       .length;
   }
 
-  init() {
-    console.log(`${LOG_TITLE} call init`);
+  // количество рекомендаций для текущего брейкпоинта
+  get itemsCountForCurrentBreakpoint() {
+    if (!this.currentBreakpoint) return 0;
 
-    if (!this.widgeListElement || typeof this.widgeListElement === 'undefined') {
-      console.error(`${LOG_TITLE} Not found DOM element for widget list`);
+    const maxItems = this.currentBreakpoint.rowsCount * this.currentBreakpoint.columnsCount;
+    return this.items.slice(0, maxItems).length || 0;
+  }
+
+  init() {
+    logInfo('call init');
+
+    if (!this.widgetListElement || typeof this.widgetListElement === 'undefined') {
+      logError('Not found DOM element for widget list');
       return;
     }
 
     if (!this.currentBreakpoint) {
-      console.error(`${LOG_TITLE} Not found settings for current breakpoint`);
+      logError('Not found settings for current breakpoint');
       return;
     }
-    console.log(`${LOG_TITLE} currentBreakpoint`, this.currentBreakpoint);
+    logInfo('currentBreakpoint', this.currentBreakpoint);
 
-    const { height: widgetListHeight } = this.widgeListElement.getBoundingClientRect();
-    if (!widgetListHeight) {
-      console.error(`${LOG_TITLE} Failed to get height for widget list element`);
-      return;
-    }
-
-    this.rows = getRows({
-      widgetListHeight,
-      rowsCount: this.currentBreakpoint.rowsCount,
-      columnsCount: this.currentBreakpoint.columnsCount,
-      rowsIndents: this.currentBreakpoint.rowsIndents,
-      items: this.items,
-    });
-
-    if (!this.rows || !this.rows.length) {
-      console.error(`${LOG_TITLE} Failed to get data for rows`);
-      return;
-    }
+    this.addResizeObserver();
+    this.addIntersectionObserver();
 
     /*
       Логика текущего примера построена на вычислении высоты всего списка с рекомендациями
@@ -121,37 +104,55 @@ export default class WidgetObserver {
       то идет подписка на событие скролла и вычисление процента просмотра виджета,
       в обратном случае используется Intersection Observer с корректировкой значений threshold.
     */
-    const windowHeight = window.innerHeight;
-    if (widgetListHeight > windowHeight && widgetListHeight / windowHeight > 1.3) {
-      console.log(`${LOG_TITLE} use scroll handler`);
-      console.log(`${LOG_TITLE} percents`, this.rows.map(row => row.percent));
-      window.addEventListener('scroll', this.handleScroll);
-      this.handleScroll();
-    } else {
-      console.log(`${LOG_TITLE} use Intersection Observer API`);
-      this.createIntersectionObserver();
-    }
+  }
 
+  addResizeObserver() {
+    logInfo('call addResizeObserver');
+    if (!this.breakpoints || this.breakpoints.length <= 1) return;
     window.addEventListener('resize', this.handleResize);
   }
 
-  createIntersectionObserver() {
-    const threshold = [0.01, ...this.rows.map(row => row.threshold)];
-    console.log(`${LOG_TITLE} threshold`, threshold);
+  addIntersectionObserver() {
+    logInfo('call addIntersectionObserver');
+
+    const { height: widgetListHeight } = this.widgetListElement.getBoundingClientRect();
+    if (!widgetListHeight) {
+      logError('Failed to get height for widget list element');
+      return;
+    }
+
+    const windowHeight = window.innerHeight;
+    const { rowsCount, rowsIndents } = this.currentBreakpoint;
+    // При текущей верстке высота строк примерно одинаковая,
+    // поэтому высоту элемента можно посчитать как высоту одной строки
+    const widgetListItemHeight = Math
+      .floor((widgetListHeight - (rowsCount - 1 * rowsIndents) / rowsCount));
+    // Корректировка threshold в случае когда высота элемента больше высоты окна
+    const threshold = windowHeight > widgetListItemHeight
+      ? 1
+      : windowHeight / widgetListItemHeight;
 
     const options = {
       root: null,
       rootMargin: '0px',
-      threshold,
+      // 0.5 - если 50% от высоты элемента показалось в области видимости,
+      // то будет вызван коллбек Intersection Observer
+      threshold: threshold * 0.5,
     };
+    logInfo('threshold for each list item', threshold * 0.5);
 
     const callback = (entries) => {
       entries.forEach((entry) => {
-        console.log(`${LOG_TITLE} isIntersecting`, entry.isIntersecting);
-        console.log(`${LOG_TITLE} intersectionRatio`, entry.intersectionRatio);
-        if (!entry.isIntersecting || !entry.intersectionRatio) return;
+        logGroup('Intersection Observer callback');
+        logInfo('target', entry.target);
+        logInfo('isIntersecting', entry.isIntersecting);
+        logInfo('intersectionRatio', entry.intersectionRatio);
+        if (!entry.isIntersecting || !entry.intersectionRatio) {
+          logGroupEnd();
+          return;
+        }
 
-        if (entry.intersectionRatio > 0.01 && (!this.events || !this.events[this.widgetId])) {
+        if (!this.events || !this.events[this.widgetId]) {
           // Добавляем событие показа виджета, если элемент со списком показался во viewport
           this.events = {
             ...this.events,
@@ -159,89 +160,50 @@ export default class WidgetObserver {
           };
         }
 
-        if (!this.rows || !this.rows.length) return;
-        /*
-          Для каждой строки проверяем соответствие
-          вычисленного для нее threshold
-          и вернувшегося из коллбека intersectionRatio
-        */
-        this.rows.forEach((row) => {
-          if (entry.intersectionRatio <= row.threshold) return;
-          if (!row.itemsIds.length) return;
+        const itemId = entry.target.getAttribute('data-item-id');
+        if (!itemId) {
+          logGroupEnd();
+          return;
+        }
 
-          row.itemsIds.forEach((itemId) => {
-            // Если это событие уже есть в объекте events,
-            // то повторное добавление не требуется
-            if (this.events && this.events[itemId]) return;
+        // Если это событие уже есть в объекте events (например после смены брейкпоинта),
+        // то можно сразу удалить наблюдатель
+        if (this.events && this.events[itemId] && this.intersectionObserver) {
+          logInfo('the event "i_show" for this element already exists in the object "events". Calling unobserve');
+          logGroupEnd();
+          this.intersectionObserver.unobserve(entry.target);
+          return;
+        }
 
-            // Добавляем новое событие просмотра рекомендации с isSended: false
-            this.events = {
-              ...this.events,
-              [itemId]: { type: 'i_show', itemId, isSended: false },
-            };
-          });
-        });
+        // Добавляем новое событие показа рекомендации на отправку
+        // и снимаем с элемента наблюдателя
+        this.events = {
+          ...this.events,
+          [itemId]: { type: 'i_show', itemId, isSended: false },
+        };
+        if (this.intersectionObserver) this.intersectionObserver.unobserve(entry.target);
+        logInfo('add an event "i_show" to the object "events" and call unobserve for this element');
+        logGroupEnd();
 
         // Если есть неотправленные события, то вызываем метод их отправки
         if (this.eventsForSend.length) this.sendEvents();
       });
     };
 
-    this.intersectionObserver = new IntersectionObserver(callback, options);
-    this.intersectionObserver.observe(this.widgeListElement);
-  }
-
-  handleScroll() {
-    if (!this.widgeListElement) return;
-    if (!this.rows || !this.rows.length) return;
-
-    const windowHeight = window.innerHeight;
-    const scroll = window.scrollY || window.pageYOffset;
-
-    const { height, top } = this.widgeListElement.getBoundingClientRect();
-    const viewedPercent = getElementViewedPercent({
-      viewportTop: scroll,
-      viewportBottom: scroll + windowHeight,
-      elementTop: scroll + top,
-      elementBottom: scroll + top + height,
-    });
-
-    if (!viewedPercent) return;
-    console.log(`${LOG_TITLE} viewedPercent`, viewedPercent);
-    if (viewedPercent > 1 && (!this.events || !this.events[this.widgetId])) {
-      // Добавляем событие показа виджета, если элемент со списком показался во viewport
-      this.events = {
-        ...this.events,
-        [this.widgetId]: { type: 'w_show', widgetId: this.widgetId, isSended: false },
-      };
+    if (!this.widgetListItemsElements || !this.widgetListItemsElements.length) {
+      logError('Failed to get array elements');
+      this.removeIntersectionObserver();
+      return;
     }
 
-    /*
-      Для каждой строки проверяем соответствие
-      вычисленного для нее процента просмотра
-      и общего процента просмотра виджета
-    */
-    this.rows.forEach((row) => {
-      if (viewedPercent <= row.percent) return;
-      if (!row.itemsIds.length) return;
-      row.itemsIds.forEach((itemId) => {
-        // Если это событие уже есть в объекте events,
-        // то повторное добавление не требуется
-        if (this.events && this.events[itemId]) return;
-
-        // Добавляем новое событие просмотра рекомендации с isSended: false
-        this.events = {
-          ...this.events,
-          [itemId]: { type: 'i_show', itemId, isSended: false },
-        };
-      });
+    this.intersectionObserver = new IntersectionObserver(callback, options);
+    this.widgetListItemsElements.forEach((element) => {
+      this.intersectionObserver.observe(element);
     });
-
-    // Если есть неотправленные события, то вызываем метод их отправки
-    if (this.eventsForSend.length) this.sendEvents();
   }
 
   handleResize() {
+    logInfo('call handleResize');
     /*
       Основная логика:
       - Высчитываем брейкпоинт для нового размера окна
@@ -253,49 +215,22 @@ export default class WidgetObserver {
     const newBreakpoint = getCurrentBreakpoint(this.breakpoints);
 
     if (!newBreakpoint) {
-      console.error(`${LOG_TITLE} Not found settings for new breakpoint`);
+      logError('Not found settings for new breakpoint');
       return;
     }
 
     // Если это тот же брейкпоинт, то ничего не делаем
     if (JSON.stringify(newBreakpoint) === JSON.stringify(this.currentBreakpoint)) return;
+    // Если кол-во рекомендаций у нового брейкпоинта меньше, чем было уже отправлено
+    // то ничего не делаем
+    if (newBreakpoint.rowsCount * newBreakpoint.columnsCount <= this.eventsSendedCount) return;
 
-    const { height: widgetListHeight } = this.widgeListElement.getBoundingClientRect();
-    if (!widgetListHeight) {
-      console.error(`${LOG_TITLE} Failed to get height for widget list element`);
-      return;
-    }
-
-    this.rows = getRows({
-      widgetListHeight,
-      rowsCount: newBreakpoint.rowsCount,
-      columnsCount: newBreakpoint.columnsCount,
-      rowsIndents: newBreakpoint.rowsIndents,
-      items: this.items,
-    });
-    console.log(`${LOG_TITLE} newCurrentBreakpoint`, newBreakpoint);
+    logInfo('newCurrentBreakpoint', newBreakpoint);
     this.currentBreakpoint = newBreakpoint;
 
-    if (this.intersectionObserver) {
-      this.intersectionObserver.unobserve(this.widgeListElement);
-      this.intersectionObserver = null;
-
-      this.createIntersectionObserver();
-    } else {
-      this.handleScroll();
-    }
-
-    /*
-      В данном примере все обработчики будут удалены только в  случае,
-      если отправлено максимальное кол-во рекомендаций для брейкпоинта 1024px - ∞,
-      что может негативно сказаться пользователях с мобильных устройств и планшетов.
-
-      В качестве дальнейшей оптимизации можно проверять
-      отправлены ли все событиях в рамках текущего брейкпоинта.
-      Если да, то удалять обработчики для события scroll/снимать наблюдение за виджетом.
-      При смене брейкпоинта делать дополнительные проверки и,
-      в случае необходимости, добавлять обработчики заново.
-    */
+    // На случай, если рейсаз произошел сразу или еще не все события отправлены
+    this.removeIntersectionObserver();
+    this.addIntersectionObserver();
   }
 
   sendEvents() {
@@ -313,7 +248,8 @@ export default class WidgetObserver {
         events,
       });
     */
-    console.log(`${LOG_TITLE} call sendEvents`, events);
+    logGroup('call sendEvents');
+    logInfo('events for send', events);
 
     // После нужно пометить отправленные события флагом isSended со значением true
     const senededEvents = this.eventsForSend.reduce((sum, current) => ({
@@ -329,24 +265,53 @@ export default class WidgetObserver {
       ...senededEvents,
     };
 
-    console.log(`${LOG_TITLE} events object`, this.events);
+    logInfo('events object', this.events);
 
     // Если отправлены события для всех рекомендаций и событие показа виджета,
-    // то нужно остановить наблюдение за виджетом
+    // то нужно удалить всех наблюдателей
     if (this.eventsSendedCount === this.items.length + 1) {
-      console.log(`${LOG_TITLE} all events sent`);
-      this.destroy();
+      logInfo('all events for all breakpoints sent');
+      this.removeIntersectionObserver();
+      this.removeResizeObserver();
+      logGroupEnd();
+      return;
     }
+
+    // Если отправлены все возможные события для текущего брейкпоинта,
+    // то нужно удалить наблюдатель за виджетом
+    if (this.eventsSendedCount === this.itemsCountForCurrentBreakpoint + 1) {
+      logInfo('all events for current breakpoint sent');
+      this.removeIntersectionObserver();
+    }
+    logGroupEnd();
+  }
+
+  removeIntersectionObserver() {
+    logInfo('call removeIntersectionObserver');
+    if (!this.intersectionObserver) return;
+    // Метод disconnect позволяет снять наблюдение со всех элементов сразу,
+    // но имеет плохую поддержку
+    if (this.intersectionObserver.disconnect) this.intersectionObserver.disconnect();
+    else {
+      if (!this.intersectionObserverElements) return;
+      this.intersectionObserverElements.forEach((element) => {
+        this.intersectionObserver.unobserve(element);
+      });
+    }
+    this.intersectionObserver = null;
+  }
+
+  removeResizeObserver() {
+    logInfo('call removeResizeObserver');
+    if (!this.breakpoints || this.breakpoints.length <= 1) return;
+    window.removeEventListener('resize', this.handleResize);
   }
 
   destroy() {
-    console.log(`${LOG_TITLE} call destroy`);
-    window.removeEventListener('scroll', this.handleScroll);
-    window.removeEventListener('resize', this.handleResize);
+    logInfo('call destroy');
 
-    if (this.intersectionObserver && this.widgeListElement) {
-      this.intersectionObserver.unobserve(this.widgeListElement);
-      this.intersectionObserver = null;
-    }
+    this.events = null;
+    this.removeIntersectionObserver();
+    this.removeResizeObserver();
   }
 }
