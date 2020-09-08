@@ -236,7 +236,7 @@ export default class WidgetObserver {
     */
     logInfo('events for send', events);
 
-    // После этого нужно пометить отправленные события флагом isSent со значением true
+    // После этого нужно пометить отправленные события со значением true
     const sentEvents = this.eventsForSend.reduce((sum, current) => ({
       ...sum,
       [current]: true,
